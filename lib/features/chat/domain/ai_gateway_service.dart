@@ -33,6 +33,15 @@ abstract interface class AiGateway {
     required String userText,
     required String systemPrompt,
   });
+
+  /// Инициатива будильника: только OpenRouter, без справки Gemini.
+  ///
+  /// Сначала запрос идёт в бесцензурную резервную модель. Если она недоступна,
+  /// используется обычная модель OpenRouter.
+  Future<AiGatewayReply> requestInitiative({
+    required String userText,
+    required String systemPrompt,
+  });
 }
 
 final class AiGatewayException implements Exception {
@@ -80,11 +89,52 @@ final class AiGatewayService implements AiGateway {
     );
   }
 
+  @override
+  Future<AiGatewayReply> requestInitiative({
+    required String userText,
+    required String systemPrompt,
+  }) async {
+    _ensureOpenRouterKey();
+    try {
+      final text = await _postOpenRouter(
+        model: AiModels.openRouterFallback,
+        systemPrompt: systemPrompt,
+        userContent: userText,
+      );
+      return AiGatewayReply(
+        factualAnswer: '',
+        characterAnswer: text,
+        geminiModel: '',
+        openRouterModel: AiModels.openRouterFallback,
+      );
+    } on AiGatewayException {
+      final text = await _postOpenRouter(
+        model: AiModels.openRouter,
+        systemPrompt: systemPrompt,
+        userContent: userText,
+      );
+      return AiGatewayReply(
+        factualAnswer: '',
+        characterAnswer: text,
+        geminiModel: '',
+        openRouterModel: AiModels.openRouter,
+      );
+    }
+  }
+
   void _ensureKeys() {
     if (ApiSecrets.isPlaceholder(_geminiApiKey) ||
         ApiSecrets.isPlaceholder(_openRouterApiKey)) {
       throw const AiGatewayException(
         'Укажите ключи Gemini и OpenRouter в lib/core/constants/api_secrets.dart.',
+      );
+    }
+  }
+
+  void _ensureOpenRouterKey() {
+    if (ApiSecrets.isPlaceholder(_openRouterApiKey)) {
+      throw const AiGatewayException(
+        'Укажите ключ OpenRouter в lib/core/constants/api_secrets.dart.',
       );
     }
   }
@@ -154,6 +204,21 @@ final class AiGatewayService implements AiGateway {
     required String userText,
     required String factualAnswer,
     required String systemPrompt,
+  }) {
+    return _postOpenRouter(
+      model: model,
+      systemPrompt: systemPrompt,
+      userContent: _characterUserMessage(
+        userText: userText,
+        factualAnswer: factualAnswer,
+      ),
+    );
+  }
+
+  Future<String> _postOpenRouter({
+    required String model,
+    required String systemPrompt,
+    required String userContent,
   }) async {
     try {
       final response = await _dio.post<Object>(
@@ -168,13 +233,7 @@ final class AiGatewayService implements AiGateway {
           'model': model,
           'messages': [
             {'role': 'system', 'content': systemPrompt},
-            {
-              'role': 'user',
-              'content': _characterUserMessage(
-                userText: userText,
-                factualAnswer: factualAnswer,
-              ),
-            },
+            {'role': 'user', 'content': userContent},
           ],
         },
       );

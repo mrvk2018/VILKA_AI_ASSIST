@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vilka_ai_assist/core/constants/api_secrets.dart';
 import 'package:vilka_ai_assist/features/chat/domain/ai_gateway_service.dart';
 
 void main() {
@@ -97,6 +98,33 @@ void main() {
     expect(reply.openRouterModel, AiModels.openRouterFallback);
     expect(reply.characterAnswer, 'Ответ характером.');
   });
+
+  test(
+    'initiative skips Gemini and starts with the uncensored model',
+    () async {
+      final requests = <RequestOptions>[];
+      final gateway = AiGatewayService(
+        dio: _scriptedDio(requests: requests),
+        geminiApiKey: ApiSecrets.geminiApiKey,
+        openRouterApiKey: openRouterKey,
+      );
+
+      final reply = await gateway.requestInitiative(
+        userText: 'Начни разговор сама',
+        systemPrompt: systemPrompt,
+      );
+
+      expect(requests, hasLength(1));
+      expect(requests.single.uri.host, 'openrouter.ai');
+      final body = requests.single.data as Map<String, dynamic>;
+      expect(body['model'], AiModels.openRouterFallback);
+      final messages = body['messages'] as List<dynamic>;
+      expect(messages.last, {'role': 'user', 'content': 'Начни разговор сама'});
+      expect(reply.geminiModel, isEmpty);
+      expect(reply.factualAnswer, isEmpty);
+      expect(reply.openRouterModel, AiModels.openRouterFallback);
+    },
+  );
 
   test('upstream errors do not echo the API key', () async {
     final dio = Dio()

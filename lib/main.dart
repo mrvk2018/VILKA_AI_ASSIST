@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
+import 'features/shell/vilka_controller.dart';
 
-void main() {
-  runApp(const VilkaApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final controller = await VilkaController.open();
+  runApp(VilkaApp(controller: controller));
 }

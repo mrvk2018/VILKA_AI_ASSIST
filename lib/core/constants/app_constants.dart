@@ -17,6 +17,9 @@ abstract final class AppConstants {
   /// Ключ shared_preferences с id выбранного характера.
   static const String selectedCharacterIdKey = 'selected_character_id';
 
+  /// Ключ shared_preferences со списком будильников инициативы.
+  static const String initiativeAlarmsKey = 'initiative_alarms';
+
   /// Подкаталог файлов конфигурации внутри каталога приложения.
   static const String configDirectoryName = 'config';
 }

@@ -5,6 +5,7 @@ import 'package:vilka_ai_assist/features/characters/characters.dart';
 import 'package:vilka_ai_assist/features/chat/domain/ai_gateway_service.dart';
 import 'package:vilka_ai_assist/features/chat/domain/chat_domain.dart';
 import 'package:vilka_ai_assist/features/chat/domain/profanity_filter.dart';
+import 'package:vilka_ai_assist/features/voice/services/tts_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -121,12 +122,57 @@ void main() {
       throwsA(isA<AiGatewayException>()),
     );
 
-    expect(heard, ['teacher_wife']);
+    expect(heard, isEmpty);
     expect(gateway.calls, 1);
     final profile = CharactersService(await SharedPreferences.getInstance())
         .profile('teacher_wife');
     expect(profile.affectionLevel, closeTo(0.35, 0.0001));
   });
+
+  test('reaction cue plays after the callback and before the reply', () async {
+    final engine = RecordingEngine();
+    final events = <String>[];
+    final service = ChatDialogueService(
+      characters: CharactersService(await SharedPreferences.getInstance()),
+      gateway: gateway,
+      voice: TtsService(engine: engine, wait: (_) async {}),
+      onLocalReaction: (tone, characterId) {
+        expect(characterId, 'teacher_wife');
+        expect(tone.hasProfanity, isTrue);
+        events.add('reaction');
+      },
+    );
+
+    await service.send(
+      characterId: 'teacher_wife',
+      userText: 'бля',
+      microphoneSamples: [
+        for (var index = 0; index < 32; index++) index.isEven ? 0.02 : -0.02,
+      ],
+    );
+
+    expect(events, ['reaction']);
+    expect(engine.spoken, ['ц-ц', 'voice']);
+    expect(engine.deliveries.last.volume, VoiceDelivery.whisperVolume);
+  });
+}
+
+final class RecordingEngine implements SpeechEngine {
+  final deliveries = <VoiceDelivery>[];
+  final spoken = <String>[];
+
+  @override
+  Future<void> apply(VoiceDelivery delivery) async {
+    deliveries.add(delivery);
+  }
+
+  @override
+  Future<void> speak(String text) async {
+    spoken.add(text);
+  }
+
+  @override
+  Future<void> stop() async {}
 }
 
 final class RecordingGateway implements AiGateway {
@@ -152,5 +198,13 @@ final class RecordingGateway implements AiGateway {
       geminiModel: AiModels.gemini,
       openRouterModel: AiModels.openRouter,
     );
+  }
+
+  @override
+  Future<AiGatewayReply> requestInitiative({
+    required String userText,
+    required String systemPrompt,
+  }) {
+    throw UnimplementedError();
   }
 }
